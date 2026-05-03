@@ -168,6 +168,11 @@ func (r *Radio) readPacket() (Packet, bool, error) {
 
 	// Must be a valid header with non-empty payload, otherwise it's noise.
 	if flags&irqValidHeader == 0 || nbBytes == 0 {
+		if nbBytes > 0 {
+			r.writeReg(regFifoAddrPtr, r.readReg(regFifoRxCurrentAddr))
+			noise := r.readBurst(regFifo, int(nbBytes))
+			log.Printf("[lora] RX noise: %d bytes: %q", nbBytes, noise)
+		}
 		r.writeReg(regIrqFlags, irqAllFlags)
 		return Packet{}, false, nil
 	}

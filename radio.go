@@ -38,8 +38,8 @@ import (
 // Packet is a received message with signal-quality metadata.
 type Packet struct {
 	Data []byte
-	RSSI int // dBm (e.g. -120)
-	SNR  int // dB (signal-to-noise, can be negative)
+	RSSI int // signal strength in dBm (e.g. -120; less negative is stronger)
+	SNR  int // signal-to-noise ratio in dB (can be negative; higher is better)
 }
 
 // Radio is a connected SX1276 module.
