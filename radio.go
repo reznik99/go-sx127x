@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"periph.io/x/conn/v3/gpio"
@@ -52,6 +53,9 @@ type Radio struct {
 	port     spi.PortCloser
 	resetPin gpio.PinOut
 	dio0Pin  gpio.PinIO
+
+	// logger receives non-fatal diagnostics; never nil after New.
+	logger *slog.Logger
 }
 
 // New opens a connection to the SX1276 and applies the given configuration.
@@ -83,6 +87,10 @@ func New(cfg Config) (*Radio, error) {
 		port:     port,
 		resetPin: resetPin,
 		dio0Pin:  dio0Pin,
+		logger:   cfg.Logger,
+	}
+	if r.logger == nil {
+		r.logger = slog.New(slog.DiscardHandler)
 	}
 
 	if err := r.init(); err != nil {

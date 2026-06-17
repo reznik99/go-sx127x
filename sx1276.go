@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"periph.io/x/conn/v3/gpio"
@@ -108,7 +107,7 @@ func (r *Radio) startReceive() {
 	r.writeReg(regFifoAddrPtr, 0x00)
 	r.writeReg(regDioMapping1, dio0RxDone)
 	if err := r.dio0Pin.In(gpio.PullDown, gpio.RisingEdge); err != nil {
-		log.Printf("[lora] DIO0 edge config: %v", err)
+		r.logger.Warn("dio0 edge config failed", "err", err)
 	}
 	r.writeReg(regOpMode, flagLoRaMode|modeRxContinuous)
 }
@@ -171,7 +170,7 @@ func (r *Radio) readPacket() (Packet, bool, error) {
 		if nbBytes > 0 {
 			r.writeReg(regFifoAddrPtr, r.readReg(regFifoRxCurrentAddr))
 			noise := r.readBurst(regFifo, int(nbBytes))
-			log.Printf("[lora] RX noise: %d bytes: %q", nbBytes, noise)
+			r.logger.Debug("rx noise discarded", "bytes", nbBytes, "data", fmt.Sprintf("%q", noise))
 		}
 		r.writeReg(regIrqFlags, irqAllFlags)
 		return Packet{}, false, nil
@@ -289,7 +288,7 @@ func (r *Radio) readReg(addr byte) byte {
 	tx := []byte{addr & 0x7F, 0x00}
 	rx := make([]byte, 2)
 	if err := r.conn.Tx(tx, rx); err != nil {
-		log.Printf("[lora] SPI read 0x%02X: %v", addr, err)
+		r.logger.Warn("spi read failed", "reg", fmt.Sprintf("0x%02X", addr), "err", err)
 	}
 	return rx[1]
 }
@@ -297,7 +296,7 @@ func (r *Radio) readReg(addr byte) byte {
 func (r *Radio) writeReg(addr, val byte) {
 	tx := []byte{addr | spiWriteBit, val}
 	if err := r.conn.Tx(tx, nil); err != nil {
-		log.Printf("[lora] SPI write 0x%02X: %v", addr, err)
+		r.logger.Warn("spi write failed", "reg", fmt.Sprintf("0x%02X", addr), "err", err)
 	}
 }
 
@@ -306,7 +305,7 @@ func (r *Radio) readBurst(addr byte, n int) []byte {
 	tx[0] = addr & 0x7F
 	rx := make([]byte, n+1)
 	if err := r.conn.Tx(tx, rx); err != nil {
-		log.Printf("[lora] SPI burst read 0x%02X (%d bytes): %v", addr, n, err)
+		r.logger.Warn("spi burst read failed", "reg", fmt.Sprintf("0x%02X", addr), "bytes", n, "err", err)
 	}
 	return rx[1:]
 }
@@ -316,6 +315,6 @@ func (r *Radio) writeBurst(addr byte, data []byte) {
 	tx[0] = addr | spiWriteBit
 	copy(tx[1:], data)
 	if err := r.conn.Tx(tx, nil); err != nil {
-		log.Printf("[lora] SPI burst write 0x%02X (%d bytes): %v", addr, len(data), err)
+		r.logger.Warn("spi burst write failed", "reg", fmt.Sprintf("0x%02X", addr), "bytes", len(data), "err", err)
 	}
 }

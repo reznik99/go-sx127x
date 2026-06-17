@@ -1,6 +1,9 @@
 package lora
 
-import "time"
+import (
+	"log/slog"
+	"time"
+)
 
 // Config holds all tunable parameters for the SX1276 radio.
 // Use DefaultConfig() and override the fields you care about.
@@ -64,6 +67,13 @@ type Config struct {
 	// LBTTimeout is the maximum time to wait for the channel to clear
 	// before giving up and returning an error from Send.
 	LBTTimeout time.Duration
+
+	// ── Logging ──
+
+	// Logger receives non-fatal diagnostics (received noise, SPI glitches,
+	// DIO0 hiccups); fatal conditions are returned as errors. If nil,
+	// diagnostics are discarded.
+	Logger *slog.Logger
 }
 
 // DefaultConfig returns a sensible starting config for a 915 MHz private network.
