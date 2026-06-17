@@ -22,9 +22,18 @@ import (
 )
 
 func main() {
-	mode := flag.String("mode", "ping", "tx, rx, or ping (transmit and receive at once)")
-	interval := flag.Duration("interval", time.Second, "transmit interval (tx and ping modes)")
-	freq := flag.Uint64("freq", 0, "carrier frequency in Hz (0 keeps the 915 MHz default)")
+	mode := flag.String("mode", "ping",
+		`one of:
+    tx   — transmit a packet every -interval; never listens. Use on one Pi
+           paired with another running -mode rx.
+    rx   — listen forever; print every packet received with RSSI/SNR. Pair
+           with another Pi in -mode tx.
+    ping — do both at once: transmit every -interval AND listen. Best for
+           range tests with two Pis (both see RSSI in each direction).`)
+	interval := flag.Duration("interval", time.Second,
+		"time between transmissions (tx and ping modes; ignored in rx)")
+	freq := flag.Uint64("freq", 0,
+		"carrier frequency in Hz (0 keeps the 915 MHz default; both ends must match)")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))

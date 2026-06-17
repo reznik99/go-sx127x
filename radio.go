@@ -34,6 +34,7 @@ import (
 	"periph.io/x/conn/v3/physic"
 	"periph.io/x/conn/v3/spi"
 	"periph.io/x/conn/v3/spi/spireg"
+	"periph.io/x/host/v3"
 )
 
 // Packet is a received message with signal-quality metadata.
@@ -59,8 +60,11 @@ type Radio struct {
 }
 
 // New opens a connection to the SX1276 and applies the given configuration.
-// Call host.Init() (from periph.io/x/host/v3) before this.
+// Calls host.Init() internally (idempotent — safe if other code also calls it).
 func New(cfg Config) (*Radio, error) {
+	if _, err := host.Init(); err != nil {
+		return nil, fmt.Errorf("host init: %w", err)
+	}
 	port, err := spireg.Open(cfg.SPIDevice)
 	if err != nil {
 		return nil, fmt.Errorf("open SPI %s: %w", cfg.SPIDevice, err)
