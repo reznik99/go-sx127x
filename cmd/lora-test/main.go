@@ -1,0 +1,111 @@
+// Command lora-test is a hardware integration and range-test tool for the
+// SX1276 radio. Run it on a Raspberry Pi with a radio attached.
+//
+// For a range test, run mode ping on two Pis and walk apart while watching the
+// RSSI/SNR of each received packet. Or run mode tx on one Pi and mode rx on the
+// other. Pipe through tee to record a run for later analysis:
+//
+//	./lora-test -mode ping | tee range.log
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"weather-balloon/lora"
+)
+
+func main() {
+	mode := flag.String("mode", "ping", "tx, rx, or ping (transmit and receive at once)")
+	interval := flag.Duration("interval", time.Second, "transmit interval (tx and ping modes)")
+	freq := flag.Uint64("freq", 0, "carrier frequency in Hz (0 keeps the 915 MHz default)")
+	flag.Parse()
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	if err := run(*mode, *interval, *freq, logger); err != nil {
+		logger.Error("fatal", "err", err)
+		os.Exit(1)
+	}
+}
+
+func run(mode string, interval time.Duration, freq uint64, logger *slog.Logger) error {
+	cfg := lora.DefaultConfig()
+	if freq != 0 {
+		cfg.Frequency = freq
+	}
+	cfg.Logger = logger.With("subsystem", "LORA") // surface driver noise/errors
+
+	radio, err := lora.New(cfg)
+	if err != nil {
+		return fmt.Errorf("open radio: %w", err)
+	}
+	defer func() {
+		if err := radio.Close(); err != nil {
+			logger.Error("radio close failed", "err", err)
+		}
+	}()
+
+	logger.Info("radio ready",
+		"mode", mode, "freq_hz", cfg.Frequency, "sf", cfg.SpreadingFactor,
+		"bw_hz", cfg.Bandwidth, "tx_power_dbm", cfg.TxPower)
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	switch mode {
+	case "tx":
+		transmit(ctx, radio, interval, logger)
+	case "rx":
+		receive(ctx, radio, logger)
+	case "ping":
+		go transmit(ctx, radio, interval, logger)
+		receive(ctx, radio, logger)
+	default:
+		return fmt.Errorf("unknown mode %q (want tx, rx, or ping)", mode)
+	}
+	return nil
+}
+
+// transmit sends an incrementing counter packet on each tick until ctx ends.
+func transmit(ctx context.Context, radio *lora.Radio, interval time.Duration, logger *slog.Logger) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	var seq uint64
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			seq++
+			payload := fmt.Sprintf("lora-test %d", seq)
+			if err := radio.Send(ctx, []byte(payload)); err != nil {
+				logger.Warn("send failed", "seq", seq, "err", err)
+				continue
+			}
+			logger.Info("sent", "seq", seq, "bytes", len(payload))
+		}
+	}
+}
+
+// receive logs every incoming packet with its signal quality until ctx ends.
+func receive(ctx context.Context, radio *lora.Radio, logger *slog.Logger) {
+	for {
+		pkt, err := radio.Receive(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			logger.Warn("receive failed", "err", err)
+			continue
+		}
+		logger.Info("received",
+			"rssi_dbm", pkt.RSSI, "snr_db", pkt.SNR,
+			"bytes", len(pkt.Data), "data", string(pkt.Data))
+	}
+}
