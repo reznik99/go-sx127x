@@ -47,8 +47,11 @@ type Config struct {
 	// TxPower in dBm (2-20). Above 17 requires PA_BOOST high-power mode.
 	TxPower int
 
-	// SyncWord is a network identifier; both peers must match.
-	// 0x12 = private/default, 0x34 = LoRaWAN.
+	// SyncWord is a 1-byte hardware filter; the SX1276 drops packets whose
+	// preamble sync word doesn't match. Both peers must use the same value.
+	// 0x12 is the "private network" default — shared with anyone else who
+	// also didn't change it. 0x34 is reserved for LoRaWAN (do not use).
+	// DefaultConfig uses a project-specific value to filter ambient noise.
 	SyncWord byte
 
 	// PreambleLength is the number of preamble symbols (default 8, range 6-65535).
@@ -89,7 +92,7 @@ func DefaultConfig() Config {
 		Bandwidth:        125_000,
 		CodingRate:       5, // 4/5
 		TxPower:          17,
-		SyncWord:         0x12,
+		SyncWord:         0xBA, // "BAlloon" — distinct from the 0x12 private default
 		PreambleLength:   8,
 		EnableCRC:        true,
 		ListenBeforeTalk: true,

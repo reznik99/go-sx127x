@@ -93,11 +93,12 @@ func transmit(ctx context.Context, radio *lora.Radio, interval time.Duration, lo
 		case <-ticker.C:
 			seq++
 			payload := fmt.Sprintf("lora-test %d", seq)
+			start := time.Now()
 			if err := radio.Send(ctx, []byte(payload)); err != nil {
 				logger.Warn("send failed", "seq", seq, "err", err)
 				continue
 			}
-			logger.Info("sent", "seq", seq, "bytes", len(payload))
+			logger.Info("sent", "seq", seq, "bytes", len(payload), "tx_ms", time.Since(start).Milliseconds())
 		}
 	}
 }
