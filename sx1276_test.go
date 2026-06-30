@@ -31,10 +31,10 @@ func TestSymbolTimeMs(t *testing.T) {
 	cases := []struct {
 		sf, bw, want int
 	}{
-		{7, 125_000, 1},     // SF7  @ 125kHz: ~1ms
-		{10, 125_000, 8},    // SF10 @ 125kHz: ~8ms
-		{12, 125_000, 32},   // SF12 @ 125kHz: ~32ms (needs low data rate optimisation)
-		{12, 500_000, 8},    // SF12 @ 500kHz: ~8ms
+		{7, 125_000, 1},   // SF7  @ 125kHz: ~1ms
+		{10, 125_000, 8},  // SF10 @ 125kHz: ~8ms
+		{12, 125_000, 32}, // SF12 @ 125kHz: ~32ms (needs low data rate optimisation)
+		{12, 500_000, 8},  // SF12 @ 500kHz: ~8ms
 	}
 	for _, c := range cases {
 		if got := symbolTimeMs(c.sf, c.bw); got != c.want {
@@ -44,7 +44,9 @@ func TestSymbolTimeMs(t *testing.T) {
 }
 
 // TestFrequencyEncoding verifies the formula:
-//   Frf = (freq * 2^19) / 32_000_000
+//
+//	Frf = (freq * 2^19) / 32_000_000
+//
 // For 915 MHz the SX1276 datasheet expects 0xE4C000.
 func TestFrequencyEncoding(t *testing.T) {
 	cases := []struct {

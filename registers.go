@@ -74,7 +74,7 @@ const spiWriteBit = 0x80 // OR with address to write a register
 
 // --- Misc ---
 const (
-	expectedVersion = 0x12  // regVersion should return this for SX1276/SX1278
-	maxPayload      = 255   // SX1276 hardware FIFO limit
-	defaultPaDac    = 0x84  // standard PA DAC (no +20 dBm boost)
+	expectedVersion = 0x12 // regVersion should return this for SX1276/SX1278
+	maxPayload      = 255  // SX1276 hardware FIFO limit
+	defaultPaDac    = 0x84 // standard PA DAC (no +20 dBm boost)
 )
