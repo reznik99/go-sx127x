@@ -105,8 +105,11 @@ func New(cfg Config) (*Radio, error) {
 	return r, nil
 }
 
-// Close releases the SPI port. The radio must not be used after Close.
+// Close waits for any in-flight Send/Receive to finish (via the lock), then
+// releases the SPI port. The radio must not be used after Close.
 func (r *Radio) Close() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.port.Close()
 }
 
