@@ -121,8 +121,8 @@ func (r *Radio) Send(ctx context.Context, data []byte) error {
 	if len(data) == 0 {
 		return errors.New("cannot send empty packet")
 	}
-	if len(data) > maxPayload {
-		return fmt.Errorf("payload too large: %d bytes (max %d)", len(data), maxPayload)
+	if len(data) > MaxPayloadSize {
+		return fmt.Errorf("payload too large: %d bytes (max %d)", len(data), MaxPayloadSize)
 	}
 	return r.send(ctx, data)
 }

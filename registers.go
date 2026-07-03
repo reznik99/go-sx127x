@@ -73,8 +73,10 @@ const (
 const spiWriteBit = 0x80 // OR with address to write a register
 
 // --- Misc ---
+// MaxPayloadSize is the SX1276 FIFO payload limit in bytes.
+const MaxPayloadSize = 255
+
 const (
 	expectedVersion = 0x12 // regVersion should return this for SX1276/SX1278
-	maxPayload      = 255  // SX1276 hardware FIFO limit
 	defaultPaDac    = 0x84 // standard PA DAC (no +20 dBm boost)
 )
