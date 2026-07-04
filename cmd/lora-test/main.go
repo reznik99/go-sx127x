@@ -34,19 +34,31 @@ func main() {
 		"time between transmissions (tx and ping modes; ignored in rx)")
 	freq := flag.Uint64("freq", 0,
 		"carrier frequency in Hz (0 keeps the 915 MHz default; both ends must match)")
+	spiDevice := flag.String("spi", "", `SPI device path (empty = "/dev/spidev0.0" default)`)
+	resetPin := flag.String("reset-pin", "", `GPIO name for RESET (empty = "GPIO25" default; e.g. GPIO157 on a Radxa ROCK 4)`)
+	dio0Pin := flag.String("dio0-pin", "", `GPIO name for DIO0 (empty = "GPIO24" default; e.g. GPIO156 on a Radxa ROCK 4)`)
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	if err := run(*mode, *interval, *freq, logger); err != nil {
+	if err := run(*mode, *interval, *freq, *spiDevice, *resetPin, *dio0Pin, logger); err != nil {
 		logger.Error("fatal", "err", err)
 		os.Exit(1)
 	}
 }
 
-func run(mode string, interval time.Duration, freq uint64, logger *slog.Logger) error {
+func run(mode string, interval time.Duration, freq uint64, spiDevice, resetPin, dio0Pin string, logger *slog.Logger) error {
 	cfg := lora.DefaultConfig()
 	if freq != 0 {
 		cfg.Frequency = freq
+	}
+	if spiDevice != "" {
+		cfg.SPIDevice = spiDevice
+	}
+	if resetPin != "" {
+		cfg.ResetPin = resetPin
+	}
+	if dio0Pin != "" {
+		cfg.DIO0Pin = dio0Pin
 	}
 	cfg.Logger = logger.With("subsystem", "LORA") // surface driver noise/errors
 
