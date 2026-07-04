@@ -1,5 +1,7 @@
 .PHONY: build test lint tidy
 
+all: build test lint tidy
+
 build:
 	go build ./...
 
