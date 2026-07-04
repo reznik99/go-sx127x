@@ -18,7 +18,7 @@ import (
 	"syscall"
 	"time"
 
-	"weather-balloon/lora"
+	"github.com/reznik99/go-sx127x"
 )
 
 func main() {

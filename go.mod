@@ -1,4 +1,4 @@
-module weather-balloon/lora
+module github.com/reznik99/go-sx127x
 
 go 1.25.0
 
