@@ -106,8 +106,14 @@ func (r *Radio) startReceive() {
 	r.writeReg(regIrqFlags, irqAllFlags)
 	r.writeReg(regFifoAddrPtr, 0x00)
 	r.writeReg(regDioMapping1, dio0RxDone)
+	// DIO0 is the RxDone interrupt. The SX1276 drives it push-pull, so the
+	// pull-down is optional. The sysfs GPIO backend (RK3399/ROCK) can't set a
+	// pull and errors out before configuring the edge, so fall back to no pull —
+	// otherwise WaitForEdge never fires and RX receives nothing.
 	if err := r.dio0Pin.In(gpio.PullDown, gpio.RisingEdge); err != nil {
-		r.logger.Warn("dio0 edge config failed", "err", err)
+		if err := r.dio0Pin.In(gpio.Float, gpio.RisingEdge); err != nil {
+			r.logger.Warn("dio0 edge config failed", "err", err)
+		}
 	}
 	r.writeReg(regOpMode, flagLoRaMode|modeRxContinuous)
 }
