@@ -39,3 +39,11 @@ func TestSetSpreadingFactorValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestGetSpreadingFactor(t *testing.T) {
+	r := &Radio{cfg: Config{SpreadingFactor: 9}}
+
+	if got := r.GetSpreadingFactor(); got != 9 {
+		t.Fatalf("GetSpreadingFactor() = %d, want 9", got)
+	}
+}

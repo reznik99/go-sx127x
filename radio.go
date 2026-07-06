@@ -133,6 +133,13 @@ func (r *Radio) Receive(ctx context.Context) (Packet, error) {
 	return r.receive(ctx)
 }
 
+// GetSpreadingFactor returns the currently configured LoRa spreading factor.
+func (r *Radio) GetSpreadingFactor() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.cfg.SpreadingFactor
+}
+
 // SetSpreadingFactor changes the LoRa spreading factor at runtime.
 //
 // The change is protected by the same hardware lock used by Send and Receive:
