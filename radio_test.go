@@ -28,3 +28,14 @@ func TestSendValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestSetSpreadingFactorValidation(t *testing.T) {
+	r := &Radio{} // no init — invalid values should fail before hardware access
+
+	for _, sf := range []int{0, 6, 13} {
+		err := r.SetSpreadingFactor(sf)
+		if err == nil || !strings.Contains(err.Error(), "invalid spreading factor") {
+			t.Errorf("SetSpreadingFactor(%d) err = %v, want invalid spreading factor", sf, err)
+		}
+	}
+}

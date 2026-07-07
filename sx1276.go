@@ -57,8 +57,8 @@ func (r *Radio) init() error {
 	r.writeReg(regModemConfig1, bwBits<<4|cr)
 
 	// Modem config 2: spreading factor | normal TX | CRC | symb timeout MSB.
-	if r.cfg.SpreadingFactor < 7 || r.cfg.SpreadingFactor > 12 {
-		return fmt.Errorf("invalid spreading factor %d (want 7-12)", r.cfg.SpreadingFactor)
+	if err := validateSpreadingFactor(r.cfg.SpreadingFactor); err != nil {
+		return err
 	}
 	cfg2 := byte(r.cfg.SpreadingFactor) << 4
 	if r.cfg.EnableCRC {
@@ -98,6 +98,29 @@ func (r *Radio) init() error {
 	}
 
 	return nil
+}
+
+// setSpreadingFactor updates only the modem settings affected by SF and returns
+// the radio to continuous recei
+// ve mode. Caller must hold mu.
+func (r *Radio) setSpreadingFactor(sf int) {
+	r.writeReg(regOpMode, flagLoRaMode|modeStandby)
+	time.Sleep(5 * time.Millisecond)
+
+	cfg2 := r.readReg(regModemConfig2)
+	cfg2 = (cfg2 & 0x0F) | byte(sf)<<4
+	r.writeReg(regModemConfig2, cfg2)
+
+	cfg3 := r.readReg(regModemConfig3)
+	if symbolTimeMs(sf, r.cfg.Bandwidth) > 16 {
+		cfg3 |= 0x08
+	} else {
+		cfg3 &^= 0x08
+	}
+	r.writeReg(regModemConfig3, cfg3)
+	r.writeReg(regIrqFlags, irqAllFlags)
+	r.cfg.SpreadingFactor = sf
+	r.startReceive()
 }
 
 // startReceive puts the radio into continuous RX mode. Caller must hold mu.
@@ -277,6 +300,13 @@ func bandwidthBits(hz int) (byte, error) {
 	default:
 		return 0, fmt.Errorf("unsupported bandwidth %d Hz (want 125000, 250000, or 500000)", hz)
 	}
+}
+
+func validateSpreadingFactor(sf int) error {
+	if sf < 7 || sf > 12 {
+		return fmt.Errorf("invalid spreading factor %d (want 7-12)", sf)
+	}
+	return nil
 }
 
 // symbolTimeMs returns the symbol duration in milliseconds for a given SF/BW.

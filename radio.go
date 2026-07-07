@@ -132,3 +132,25 @@ func (r *Radio) Send(ctx context.Context, data []byte) error {
 func (r *Radio) Receive(ctx context.Context) (Packet, error) {
 	return r.receive(ctx)
 }
+
+// SetSpreadingFactor changes the LoRa spreading factor at runtime.
+//
+// The change is protected by the same hardware lock used by Send and Receive:
+// an active Send finishes first, packet reads finish first, and a Receive that is
+// only waiting for DIO0 does not block the reconfiguration. A packet being sent
+// by the peer during the switch may be lost; callers should only use this when
+// that is acceptable, such as link-recovery rendezvous.
+func (r *Radio) SetSpreadingFactor(sf int) error {
+	if err := validateSpreadingFactor(sf); err != nil {
+		return err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.cfg.SpreadingFactor == sf {
+		return nil
+	}
+	r.setSpreadingFactor(sf)
+	return nil
+}
