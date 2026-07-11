@@ -45,51 +45,17 @@ func (r *Radio) init() error {
 	// LNA: max gain + HF boost for best receive sensitivity.
 	r.writeReg(regLna, 0x23)
 
-	// Modem config 1: bandwidth | coding rate | header mode (explicit = 0).
-	bwBits, err := bandwidthBits(r.cfg.Bandwidth)
-	if err != nil {
+	// Modem-config and PA registers, shared with the runtime SetModem path.
+	if _, err := bandwidthBits(r.cfg.Bandwidth); err != nil {
 		return err
 	}
-	if r.cfg.CodingRate < 5 || r.cfg.CodingRate > 8 {
-		return fmt.Errorf("invalid coding rate %d (want 5-8)", r.cfg.CodingRate)
-	}
-	cr := byte(r.cfg.CodingRate-4) << 1 // 5→001, 6→010, 7→011, 8→100
-	r.writeReg(regModemConfig1, bwBits<<4|cr)
-
-	// Modem config 2: spreading factor | normal TX | CRC | symb timeout MSB.
-	if err := validateSpreadingFactor(r.cfg.SpreadingFactor); err != nil {
+	if err := validateModem(r.cfg.Modem); err != nil {
 		return err
 	}
-	cfg2 := byte(r.cfg.SpreadingFactor) << 4
-	if r.cfg.EnableCRC {
-		cfg2 |= 0x04
-	}
-	r.writeReg(regModemConfig2, cfg2)
-
-	// Modem config 3: low data rate optimisation if symbol time > 16ms, AGC on.
-	cfg3 := byte(0x04) // AGC auto on
-	if symbolTimeMs(r.cfg.SpreadingFactor, r.cfg.Bandwidth) > 16 {
-		cfg3 |= 0x08
-	}
-	r.writeReg(regModemConfig3, cfg3)
-
-	// Preamble length.
-	r.writeReg(regPreambleMsb, byte(r.cfg.PreambleLength>>8))
-	r.writeReg(regPreambleLsb, byte(r.cfg.PreambleLength))
+	r.writeModem(r.cfg.Modem)
 
 	// Sync word.
 	r.writeReg(regSyncWord, r.cfg.SyncWord)
-
-	// PA: PA_BOOST pin, max output. PaConfig = 0x80 | (TxPower - 2).
-	if r.cfg.TxPower < 2 || r.cfg.TxPower > 20 {
-		return fmt.Errorf("invalid tx power %d (want 2-20)", r.cfg.TxPower)
-	}
-	r.writeReg(regPaConfig, 0x80|byte(r.cfg.TxPower-2))
-	if r.cfg.TxPower > 17 {
-		r.writeReg(regPaDac, 0x87) // +20 dBm boost (use sparingly — duty cycle limits)
-	} else {
-		r.writeReg(regPaDac, defaultPaDac)
-	}
 
 	// Verify SPI writes by reading back a key register.
 	if got := r.readReg(regSyncWord); got != r.cfg.SyncWord {
@@ -100,27 +66,83 @@ func (r *Radio) init() error {
 	return nil
 }
 
-// setSpreadingFactor updates only the modem settings affected by SF and returns
-// the radio to continuous recei
-// ve mode. Caller must hold mu.
-func (r *Radio) setSpreadingFactor(sf int) {
-	r.writeReg(regOpMode, flagLoRaMode|modeStandby)
-	time.Sleep(5 * time.Millisecond)
+func validateModem(modem Modem) error {
+	if err := validateSpreadingFactor(modem.SpreadingFactor); err != nil {
+		return err
+	}
+	if modem.CodingRate < 5 || modem.CodingRate > 8 {
+		return fmt.Errorf("invalid coding rate %d (want 5-8)", modem.CodingRate)
+	}
+	if modem.TxPower < 2 || modem.TxPower > 20 {
+		return fmt.Errorf("invalid tx power %d (want 2-20)", modem.TxPower)
+	}
+	return nil
+}
 
-	cfg2 := r.readReg(regModemConfig2)
-	cfg2 = (cfg2 & 0x0F) | byte(sf)<<4
+// writeModem programs the modem-config and PA registers and records them in cfg.
+// It touches no operating mode and does not re-arm RX — the caller owns that.
+// Shared by init (boot) and SetModem (runtime switch). Caller must hold mu.
+func (r *Radio) writeModem(modem Modem) {
+	bwBits, _ := bandwidthBits(r.cfg.Bandwidth) // validated by the caller
+	cr := byte(modem.CodingRate-4) << 1         // 5→001 .. 8→100
+	r.writeReg(regModemConfig1, bwBits<<4|cr)
+
+	cfg2 := byte(modem.SpreadingFactor) << 4
+	if r.cfg.EnableCRC {
+		cfg2 |= 0x04
+	}
 	r.writeReg(regModemConfig2, cfg2)
 
-	cfg3 := r.readReg(regModemConfig3)
-	if symbolTimeMs(sf, r.cfg.Bandwidth) > 16 {
-		cfg3 |= 0x08
-	} else {
-		cfg3 &^= 0x08
+	cfg3 := byte(0x04) // AGC auto on
+	if symbolTimeMs(modem.SpreadingFactor, r.cfg.Bandwidth) > 16 {
+		cfg3 |= 0x08 // low data rate optimisation
 	}
 	r.writeReg(regModemConfig3, cfg3)
+
+	r.writeReg(regPreambleMsb, byte(modem.PreambleLength>>8))
+	r.writeReg(regPreambleLsb, byte(modem.PreambleLength))
+	r.writePA(modem.TxPower)
+
+	r.cfg.Modem = modem
+}
+
+// paRegisters returns the PA_BOOST register bytes for txPower. Above +17 dBm the
+// OutputPower nibble is already saturated, so the extra +3 dB comes from the
+// PaDac high-power bit — and that higher PA current needs OCP raised above its
+// ~100 mA reset default. At ≤17 dBm OCP is left alone (setOcp false), matching a
+// config that never touches it.
+func paRegisters(txPower int) (paConfig, paDac, ocp byte, setOcp bool) {
+	if txPower > 17 {
+		return 0x80 | byte(txPower-5), 0x87, 0x20 | 0x11, true // OCP on, Imax 140 mA
+	}
+	return 0x80 | byte(txPower-2), defaultPaDac, 0, false
+}
+
+func (r *Radio) writePA(txPower int) {
+	paConfig, paDac, ocp, setOcp := paRegisters(txPower)
+	r.writeReg(regPaConfig, paConfig)
+	r.writeReg(regPaDac, paDac)
+	if setOcp {
+		r.writeReg(regOcp, ocp)
+	}
+}
+
+// SetModem switches the on-air parameters at runtime and re-arms RX, under the
+// same lock as Send and Receive. A packet the peer sends during the switch may
+// be lost, so use it only for coordinated changes — a commanded profile switch
+// or a link-recovery rendezvous.
+func (r *Radio) SetModem(modem Modem) error {
+	if err := validateModem(modem); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.writeReg(regOpMode, flagLoRaMode|modeStandby)
+	time.Sleep(5 * time.Millisecond)
+	r.writeModem(modem)
 	r.writeReg(regIrqFlags, irqAllFlags)
-	r.cfg.SpreadingFactor = sf
 	r.startReceive()
+	return nil
 }
 
 // startReceive puts the radio into continuous RX mode. Caller must hold mu.

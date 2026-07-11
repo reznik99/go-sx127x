@@ -5,6 +5,30 @@ import (
 	"time"
 )
 
+// Modem holds the on-air LoRa parameters that can be changed at runtime.
+// Config embeds it (applied at New) and SetModem takes it (applied on a live
+// switch), so both paths share one definition and one register-writing helper.
+//
+// Bandwidth is deliberately NOT here — it lives in Config because it is fixed
+// at New and never switched at runtime.
+type Modem struct {
+	// SpreadingFactor controls range vs speed (7-12).
+	// SF7 = fastest (~5.5 kbps), shortest range.
+	// SF12 = slowest (~250 bps), longest range.
+	SpreadingFactor int
+
+	// CodingRate is the forward error correction (5-8, representing 4/5 to 4/8).
+	// Higher = more redundancy = better resilience but more overhead.
+	CodingRate int
+
+	// TxPower in dBm (2-20). Above 17 requires PA_BOOST high-power mode.
+	TxPower int
+
+	// PreambleLength is the number of preamble symbols (default 8, range 6-65535).
+	// Longer preamble = better sync at the cost of airtime.
+	PreambleLength uint16
+}
+
 // Config holds all tunable parameters for the SX1276 radio.
 // Use DefaultConfig() and override the fields you care about.
 type Config struct {
@@ -31,21 +55,12 @@ type Config struct {
 	// Must be within the regional ISM band (NZ/US: 915, EU: 868, Asia: 433).
 	Frequency uint64
 
-	// SpreadingFactor controls range vs speed (7-12).
-	// SF7 = fastest (~5.5 kbps), shortest range.
-	// SF12 = slowest (~250 bps), longest range.
-	SpreadingFactor int
-
 	// Bandwidth in Hz: 125_000 | 250_000 | 500_000.
 	// Lower bandwidth = better sensitivity but slower.
 	Bandwidth int
 
-	// CodingRate is the forward error correction (5-8, representing 4/5 to 4/8).
-	// Higher = more redundancy = better resilience but more overhead.
-	CodingRate int
-
-	// TxPower in dBm (2-20). Above 17 requires PA_BOOST high-power mode.
-	TxPower int
+	// Modem carries the runtime-switchable on-air parameters (see SetModem).
+	Modem
 
 	// SyncWord is a 1-byte hardware filter; the SX1276 drops packets whose
 	// preamble sync word doesn't match. Both peers must use the same value.
@@ -53,10 +68,6 @@ type Config struct {
 	// also didn't change it. 0x34 is reserved for LoRaWAN (do not use).
 	// DefaultConfig uses a non-default value to filter ambient noise.
 	SyncWord byte
-
-	// PreambleLength is the number of preamble symbols (default 8, range 6-65535).
-	// Longer preamble = better sync at the cost of airtime.
-	PreambleLength uint16
 
 	// ── Behavior ──
 
@@ -83,17 +94,19 @@ type Config struct {
 // Override the fields you need.
 func DefaultConfig() Config {
 	return Config{
-		SPIDevice:        "/dev/spidev0.0",
-		SPISpeed:         1_000_000,
-		ResetPin:         "GPIO25",
-		DIO0Pin:          "GPIO24",
-		Frequency:        915_000_000,
-		SpreadingFactor:  7,
-		Bandwidth:        125_000,
-		CodingRate:       5, // 4/5
-		TxPower:          17,
-		SyncWord:         0xBA, // arbitrary non-default value; distinct from the 0x12 private default
-		PreambleLength:   8,
+		SPIDevice: "/dev/spidev0.0",
+		SPISpeed:  1_000_000,
+		ResetPin:  "GPIO25",
+		DIO0Pin:   "GPIO24",
+		Frequency: 915_000_000,
+		Bandwidth: 125_000,
+		SyncWord:  0xBA, // arbitrary non-default value; distinct from the 0x12 private default
+		Modem: Modem{
+			SpreadingFactor: 7,
+			CodingRate:      5, // 4/5
+			TxPower:         17,
+			PreambleLength:  8,
+		},
 		EnableCRC:        true,
 		ListenBeforeTalk: true,
 		LBTTimeout:       2 * time.Second,

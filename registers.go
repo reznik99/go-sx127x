@@ -17,6 +17,7 @@ const (
 	regFrfMid            = 0x07 // carrier frequency mid
 	regFrfLsb            = 0x08 // carrier frequency LSB
 	regPaConfig          = 0x09 // power amplifier config
+	regOcp               = 0x0B // PA over-current protection (trim + enable)
 	regLna               = 0x0C // low-noise amplifier (RX sensitivity)
 	regFifoAddrPtr       = 0x0D // current FIFO read/write position
 	regFifoTxBaseAddr    = 0x0E // FIFO start address for TX
